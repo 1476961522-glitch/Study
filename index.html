@@ -4362,20 +4362,43 @@
         var isCustom = btn.getAttribute('data-custom') === 'true';
         var dayKey = 'd' + dayNum;
 
+       var dayObj = dayData.find(function(d) { return d.day === dayNum; });
+        if (!dayObj) return;
+
+        if (!isCustom && !confirm('这是默认任务，确定要删除吗？')) return;
+
+        /* 删除前：按顺序捕获剩余任务的完成状态（排除被删项）。
+           删除后索引会位移，旧的 t/c 键不再对应同一任务，需重新映射。 */
+        var customBefore = saved.customTasks[dayKey] || [];
+        var allBefore = dayObj.tasks.concat(customBefore);
+        var doneStates = [];
+        for (var bi = 0; bi < allBefore.length; bi++) {
+          if (bi === idx) continue;
+          var bk = dayKey + '-' + (bi < dayObj.tasks.length ? 't' + bi : 'c' + bi);
+          doneStates.push(!!saved.tasks[bk]);
+        }
+
+        /* 执行删除 */
         if (!isCustom) {
-          if (!confirm('这是默认任务，确定要删除吗？')) return;
-          /* 删除默认任务：将其从 dayData 中移除 */
-          var dayObj = dayData.find(function(d) { return d.day === dayNum; });
-          if (dayObj) dayObj.tasks.splice(idx, 1);
+          dayObj.tasks.splice(idx, 1);
         } else {
-          /* 删除自定义任务 */
-          var customIdx = idx - (dayData.find(function(d) { return d.day === dayNum; }).tasks.length);
+          var customIdx = idx - dayObj.tasks.length;
           saved.customTasks[dayKey].splice(customIdx, 1);
         }
-        /* 清理旧的打卡记录 */
+
+        /* 清理该天所有旧键，再按新顺序重新写入完成状态（避免误清空其他任务进度） */
         Object.keys(saved.tasks).forEach(function(k) {
           if (k.indexOf(dayKey + '-') === 0) delete saved.tasks[k];
         });
+        var customAfter = saved.customTasks[dayKey] || [];
+        var allAfter = dayObj.tasks.concat(customAfter);
+        for (var ai = 0; ai < allAfter.length && ai < doneStates.length; ai++) {
+          if (doneStates[ai]) {
+            var ak = dayKey + '-' + (ai < dayObj.tasks.length ? 't' + ai : 'c' + ai);
+            saved.tasks[ak] = true;
+          }
+        }
+
         saveData();
         renderDayCards();
       });
